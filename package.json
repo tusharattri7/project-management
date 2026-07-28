@@ -1,0 +1,20 @@
+{
+  "name": "projmanagement",
+  "version": "1.0.0",
+  "description": "beginner project management application",
+  "keywords": [
+    "API",
+    "backend"
+  ],
+  "license": "ISC",
+  "author": "Tushar Attri",
+  "type": "commonjs",
+  "main": "index.js",
+  "types": "module",
+  "scripts": {
+    "dev": "node index.js"
+  },
+  "devDependencies": {
+    "prettier": "3.9.6"
+  }
+}
