@@ -1,8 +1,16 @@
+# Dependencies
+backend/node_modules/
+frontend/node_modules/
 node_modules/
+
+# Environment Variables
+backend/.env
+frontend/.env
 .env
-.env.*
-!.env.sample
-public/images/*
-!public/images/.gitkeep
-dist/
-build/
+
+# Build outputs
+frontend/dist/
+
+# Uploads
+backend/public/images/*
+!backend/public/images/.gitkeep
