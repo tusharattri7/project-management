@@ -5,7 +5,7 @@ import {
   LogOut,
   User,
   LayoutDashboard,
-  Plus,
+  Settings as SettingsIcon,
 } from "lucide-react";
 
 export const AppLayout = () => {
@@ -20,20 +20,17 @@ export const AppLayout = () => {
 
   return (
     <div className="flex h-screen w-full bg-slate-50">
-      {/* Sidebar */}
       <aside className="w-64 border-r border-slate-200 bg-white flex flex-col justify-between">
         <div>
-          {/* Logo / Brand */}
           <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold shadow-sm">
               <FolderKanban className="h-5 w-5" />
             </div>
             <span className="font-semibold text-slate-800 text-lg">
-              Project Management
+              Basecampy
             </span>
           </div>
 
-          {/* Navigation Links */}
           <nav className="p-4 space-y-1">
             <Link
               to="/"
@@ -46,10 +43,21 @@ export const AppLayout = () => {
               <LayoutDashboard className="h-4 w-4" />
               Projects
             </Link>
+
+            <Link
+              to="/settings"
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                location.pathname === "/settings"
+                  ? "bg-indigo-50 text-indigo-600"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <SettingsIcon className="h-4 w-4" />
+              Settings
+            </Link>
           </nav>
         </div>
 
-        {/* User Info & Logout Footer */}
         <div className="border-t border-slate-100 p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 overflow-hidden">
@@ -85,7 +93,6 @@ export const AppLayout = () => {
         </div>
       </aside>
 
-      {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>

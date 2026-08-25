@@ -4,6 +4,7 @@ import {
   getProjectByIdApi,
   getProjectMembersApi,
   addMemberToProjectApi,
+  deleteMemberFromProjectApi,
 } from "../api/project.api.js";
 import {
   getTasksApi,
@@ -14,12 +15,20 @@ import {
 import { Button } from "../components/Button.jsx";
 import { Input } from "../components/Input.jsx";
 import { Modal } from "../components/Modal.jsx";
-import { ArrowLeft, Plus, Trash2, UserPlus } from "lucide-react";
+import { TaskModal } from "../components/TaskModal.jsx";
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  UserPlus,
+  CheckSquare,
+  Paperclip,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 const COLUMNS = [
   {
-    id: "todo",
+    id: "todos",
     title: "To Do",
     bg: "bg-slate-100",
     border: "border-slate-200",
@@ -45,20 +54,24 @@ export const ProjectDetails = () => {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Modals & Selected Task
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Task creation state
   const [taskForm, setTaskForm] = useState({
     title: "",
     description: "",
-    status: "todo",
+    status: "todos",
     assignedTo: "",
   });
+  const [attachments, setAttachments] = useState([]);
   const [memberForm, setMemberForm] = useState({ email: "", role: "member" });
-  const [submitting, setSubmitting] = useState(false);
 
   const fetchProjectData = async () => {
     try {
-      setLoading(true);
       const [projRes, tasksRes, membersRes] = await Promise.all([
         getProjectByIdApi(projectId),
         getTasksApi(projectId),
@@ -66,8 +79,15 @@ export const ProjectDetails = () => {
       ]);
 
       setProject(projRes?.data?.data || null);
-      setTasks(tasksRes?.data?.data || []);
+      const fetchedTasks = tasksRes?.data?.data || [];
+      setTasks(fetchedTasks);
       setMembers(membersRes?.data?.data || []);
+
+      // If a task modal is currently open, keep its state synced
+      if (selectedTask) {
+        const updated = fetchedTasks.find((t) => t._id === selectedTask._id);
+        setSelectedTask(updated || null);
+      }
     } catch (error) {
       toast.error("Failed to load project details");
     } finally {
@@ -83,15 +103,22 @@ export const ProjectDetails = () => {
 
   const handleCreateTask = async (e) => {
     e.preventDefault();
+    if (!taskForm.title.trim()) return;
+
     try {
       setSubmitting(true);
       const formData = new FormData();
-      formData.append("title", taskForm.title);
-      if (taskForm.description)
-        formData.append("description", taskForm.description);
+      formData.append("title", taskForm.title.trim());
+      if (taskForm.description?.trim())
+        formData.append("description", taskForm.description.trim());
       formData.append("status", taskForm.status);
-      if (taskForm.assignedTo)
-        formData.append("assignedTo", taskForm.assignedTo);
+      if (taskForm.assignedTo?.trim())
+        formData.append("assignedTo", taskForm.assignedTo.trim());
+
+      // Append files
+      Array.from(attachments).forEach((file) => {
+        formData.append("attachments", file);
+      });
 
       await createTaskApi(projectId, formData);
       toast.success("Task created!");
@@ -99,18 +126,24 @@ export const ProjectDetails = () => {
       setTaskForm({
         title: "",
         description: "",
-        status: "todo",
+        status: "todos",
         assignedTo: "",
       });
+      setAttachments([]);
       fetchProjectData();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to create task");
+      const errorMsg =
+        error.response?.data?.errors?.[0]?.msg ||
+        error.response?.data?.message ||
+        "Failed to create task";
+      toast.error(errorMsg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleStatusChange = async (taskId, newStatus) => {
+  const handleStatusChange = async (e, taskId, newStatus) => {
+    e.stopPropagation();
     try {
       await updateTaskApi(projectId, taskId, { status: newStatus });
       setTasks((prev) =>
@@ -122,11 +155,13 @@ export const ProjectDetails = () => {
     }
   };
 
-  const handleDeleteTask = async (taskId) => {
+  const handleDeleteTask = async (e, taskId) => {
+    e.stopPropagation();
     if (!window.confirm("Are you sure you want to delete this task?")) return;
     try {
       await deleteTaskApi(projectId, taskId);
       setTasks((prev) => prev.filter((t) => t._id !== taskId));
+      if (selectedTask?._id === taskId) setSelectedTask(null);
       toast.success("Task deleted");
     } catch (error) {
       toast.error("Failed to delete task");
@@ -139,13 +174,23 @@ export const ProjectDetails = () => {
       setSubmitting(true);
       await addMemberToProjectApi(projectId, memberForm);
       toast.success("Member added successfully!");
-      setIsMemberModalOpen(false);
       setMemberForm({ email: "", role: "member" });
       fetchProjectData();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to add member");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRemoveMember = async (userId) => {
+    if (!window.confirm("Remove this member from the project?")) return;
+    try {
+      await deleteMemberFromProjectApi(projectId, userId);
+      toast.success("Member removed");
+      fetchProjectData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to remove member");
     }
   };
 
@@ -159,6 +204,7 @@ export const ProjectDetails = () => {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
+      {/* Header */}
       <div className="space-y-4">
         <Link
           to="/"
@@ -195,6 +241,7 @@ export const ProjectDetails = () => {
         </div>
       </div>
 
+      {/* Kanban Board */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {COLUMNS.map((col) => {
           const colTasks = tasks.filter((t) => t.status === col.id);
@@ -214,57 +261,92 @@ export const ProjectDetails = () => {
               </div>
 
               <div className="space-y-3 flex-1">
-                {colTasks.map((task) => (
-                  <div
-                    key={task._id}
-                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md space-y-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-medium text-slate-900 text-sm leading-snug">
-                        {task.title}
-                      </h4>
-                      <button
-                        onClick={() => handleDeleteTask(task._id)}
-                        className="text-slate-400 hover:text-red-500 p-1 rounded-md"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                {colTasks.map((task) => {
+                  const completedSubtasks =
+                    task.subtasks?.filter((s) => s.isCompleted).length || 0;
+                  const totalSubtasks = task.subtasks?.length || 0;
 
-                    {task.description && (
-                      <p className="text-xs text-slate-500 line-clamp-2">
-                        {task.description}
-                      </p>
-                    )}
+                  return (
+                    <div
+                      key={task._id}
+                      onClick={() => setSelectedTask(task)}
+                      className="cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="font-medium text-slate-900 text-sm leading-snug">
+                          {task.title}
+                        </h4>
+                        <button
+                          onClick={(e) => handleDeleteTask(e, task._id)}
+                          className="text-slate-400 hover:text-red-500 p-1 rounded-md transition"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
 
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                      <select
-                        value={task.status}
-                        onChange={(e) =>
-                          handleStatusChange(task._id, e.target.value)
-                        }
-                        className="text-xs bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      >
-                        <option value="todo">To Do</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="done">Done</option>
-                      </select>
-
-                      {task.assignedTo && (
-                        <span className="text-[11px] text-slate-400">
-                          {task.assignedTo?.fullName ||
-                            task.assignedTo?.username}
-                        </span>
+                      {task.description && (
+                        <p className="text-xs text-slate-500 line-clamp-2">
+                          {task.description}
+                        </p>
                       )}
+
+                      {/* Subtask & Attachment Badges */}
+                      <div className="flex items-center gap-3 text-xs text-slate-400">
+                        {totalSubtasks > 0 && (
+                          <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                            <CheckSquare className="h-3.5 w-3.5 text-slate-400" />
+                            {completedSubtasks}/{totalSubtasks}
+                          </span>
+                        )}
+                        {task.attachments?.length > 0 && (
+                          <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                            <Paperclip className="h-3.5 w-3.5 text-slate-400" />
+                            {task.attachments.length}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Status Selector & Assignee */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <select
+                          value={task.status}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) =>
+                            handleStatusChange(e, task._id, e.target.value)
+                          }
+                          className="text-xs bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        >
+                          <option value="todos">To Do</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="done">Done</option>
+                        </select>
+
+                        {task.assignedTo && (
+                          <span className="text-[11px] font-medium text-slate-500 truncate max-w-[100px]">
+                            {task.assignedTo?.fullName ||
+                              task.assignedTo?.username}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );
         })}
       </div>
 
+      {/* Task Details & Subtasks Modal */}
+      <TaskModal
+        isOpen={!!selectedTask}
+        onClose={() => setSelectedTask(null)}
+        task={selectedTask}
+        projectId={projectId}
+        onTaskUpdated={fetchProjectData}
+      />
+
+      {/* Create Task Modal */}
       <Modal
         isOpen={isTaskModalOpen}
         onClose={() => setIsTaskModalOpen(false)}
@@ -280,6 +362,7 @@ export const ProjectDetails = () => {
             }
             required
           />
+
           <div className="w-full space-y-1">
             <label className="block text-sm font-medium text-slate-700">
               Description
@@ -294,22 +377,58 @@ export const ProjectDetails = () => {
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="w-full space-y-1">
+              <label className="block text-sm font-medium text-slate-700">
+                Status
+              </label>
+              <select
+                value={taskForm.status}
+                onChange={(e) =>
+                  setTaskForm({ ...taskForm, status: e.target.value })
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+              >
+                <option value="todos">To Do</option>
+                <option value="in_progress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+
+            <div className="w-full space-y-1">
+              <label className="block text-sm font-medium text-slate-700">
+                Assign Member
+              </label>
+              <select
+                value={taskForm.assignedTo}
+                onChange={(e) =>
+                  setTaskForm({ ...taskForm, assignedTo: e.target.value })
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+              >
+                <option value="">Unassigned</option>
+                {members.map((m) => (
+                  <option key={m.user?._id} value={m.user?._id}>
+                    {m.user?.fullName || m.user?.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div className="w-full space-y-1">
             <label className="block text-sm font-medium text-slate-700">
-              Initial Status
+              Attachments
             </label>
-            <select
-              value={taskForm.status}
-              onChange={(e) =>
-                setTaskForm({ ...taskForm, status: e.target.value })
-              }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-            >
-              <option value="todo">To Do</option>
-              <option value="in_progress">In Progress</option>
-              <option value="done">Done</option>
-            </select>
+            <input
+              type="file"
+              multiple
+              onChange={(e) => setAttachments(e.target.files)}
+              className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+            />
           </div>
+
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => setIsTaskModalOpen(false)}>
               Cancel
@@ -321,6 +440,7 @@ export const ProjectDetails = () => {
         </form>
       </Modal>
 
+      {/* Manage Members Modal */}
       <Modal
         isOpen={isMemberModalOpen}
         onClose={() => setIsMemberModalOpen(false)}
@@ -363,7 +483,7 @@ export const ProjectDetails = () => {
               {members.map((m) => (
                 <div
                   key={m._id}
-                  className="flex items-center justify-between py-2 text-sm"
+                  className="flex items-center justify-between py-2.5 text-sm"
                 >
                   <div>
                     <p className="font-medium text-slate-800">
@@ -371,9 +491,18 @@ export const ProjectDetails = () => {
                     </p>
                     <p className="text-xs text-slate-400">{m.user?.email}</p>
                   </div>
-                  <span className="text-xs uppercase font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                    {m.role}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                      {m.role}
+                    </span>
+                    <button
+                      onClick={() => handleRemoveMember(m.user?._id)}
+                      className="text-slate-400 hover:text-red-500 p-1"
+                      title="Remove member"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

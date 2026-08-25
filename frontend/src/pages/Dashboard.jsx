@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getProjectsApi, createProjectApi } from "../api/project.api.js";
+import {
+  getProjectsApi,
+  createProjectApi,
+  deleteProjectApi,
+} from "../api/project.api.js";
 import { Button } from "../components/Button.jsx";
 import { Input } from "../components/Input.jsx";
 import { Modal } from "../components/Modal.jsx";
-import { Plus, FolderKanban, Users, Clock } from "lucide-react";
+import { Plus, FolderKanban, Users, Clock, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 export const Dashboard = () => {
@@ -20,7 +24,6 @@ export const Dashboard = () => {
       const res = await getProjectsApi();
       const rawData = res.data?.data || [];
 
-      // Normalize backend project structure
       const normalized = rawData.map((item) => {
         const projectObj = item.project || item;
         return {
@@ -61,6 +64,27 @@ export const Dashboard = () => {
       toast.error(error.response?.data?.message || "Failed to create project");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDeleteProject = async (e, projectId) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this project? All associated tasks will be removed.",
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      await deleteProjectApi(projectId);
+      toast.success("Project deleted successfully");
+      setProjects((prev) => prev.filter((p) => p._id !== projectId));
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message || "Failed to delete project";
+      toast.error(errorMsg);
     }
   };
 
@@ -125,9 +149,18 @@ export const Dashboard = () => {
                   <h3 className="font-semibold text-slate-900 text-base group-hover:text-indigo-600 transition truncate">
                     {project.name}
                   </h3>
-                  <span className="text-xs uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">
-                    {project.role}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">
+                      {project.role}
+                    </span>
+                    <button
+                      onClick={(e) => handleDeleteProject(e, project._id)}
+                      title="Delete Project"
+                      className="p-1 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
                 <p className="text-xs text-slate-500 line-clamp-2">
                   {project.description || "No description provided."}
