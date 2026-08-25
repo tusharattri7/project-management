@@ -1,2 +1,7 @@
-node_modules
+node_modules/
 .env
+.env.*
+public/images/*
+!public/images/.gitkeep
+dist/
+build/
